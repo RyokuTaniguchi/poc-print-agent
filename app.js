@@ -1,4 +1,6 @@
 (() => {
+    const BASE_URL_PREFIX = "https://xxx.com/x/";
+
     const templateOptions = [
         {
             id: "template-12x15",
@@ -30,6 +32,14 @@
     const printButton = document.getElementById("print-button");
     const statusLog = document.getElementById("status-log");
     const printerStatus = document.getElementById("printer-status");
+
+    urlInput.readOnly = true;
+    urlInput.value = BASE_URL_PREFIX;
+
+    uuidInput.addEventListener("input", () => {
+        const uuid = uuidInput.value.trim();
+        urlInput.value = BASE_URL_PREFIX + uuid;
+    });
 
     if (typeof TepraPrint === "undefined" || typeof TepraPrintError === "undefined") {
         logStatus("tepraprint.js の読み込みに失敗しました。ファイルパスを確認してください。");
@@ -81,14 +91,25 @@
             return;
         }
 
-        const datatime = datatimeInput.value.trim();
-        const url = urlInput.value.trim();
+        const rawDate = datatimeInput.value.trim();
         const uuid = uuidInput.value.trim();
+        const url = BASE_URL_PREFIX + uuid;
 
-        if (!datatime || !url || !uuid) {
-            logStatus("datatime / URL / UUID をすべて入力してください。");
+        urlInput.value = url;
+
+        if (!rawDate || !uuid) {
+            logStatus("日付 / UUID をすべて入力してください。");
             return;
         }
+
+        const dateMatch = rawDate.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+        if (!dateMatch) {
+            logStatus("日付の形式が正しくありません。カレンダーから日付を選択してください。");
+            return;
+        }
+
+        const [, year, month, day] = dateMatch;
+        const datatime = `${year}年${month}月${day}日`;
 
         setWorkingState(true, "テンプレートを準備しています…");
 
