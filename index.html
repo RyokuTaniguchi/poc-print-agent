@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>TEPRA Web Print Demo</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <main class="container">
+        <h1>TEPRA ラベル印刷</h1>
+        <section class="panel">
+            <form id="print-form">
+                <div class="field">
+                    <label for="printer-select">プリンター</label>
+                    <div class="inline-group">
+                        <select id="printer-select" required>
+                            <option value="">-- プリンターを選択 --</option>
+                        </select>
+                        <button type="button" id="reload-printers" class="secondary">再読み込み</button>
+                    </div>
+                    <small id="printer-status" class="hint"></small>
+                </div>
+
+                <div class="field">
+                    <label for="template-select">テンプレート</label>
+                    <select id="template-select" required>
+                        <option value="">-- テンプレートを選択 --</option>
+                    </select>
+                </div>
+
+                <div class="field">
+                    <label for="datatime-input">datatime</label>
+                    <input id="datatime-input" type="text" placeholder="2025年1月1日" required>
+                </div>
+
+                <div class="field">
+                    <label for="url-input">URL</label>
+                    <input id="url-input" type="url" placeholder="https://test.com/t-20250000001" required>
+                </div>
+
+                <div class="field">
+                    <label for="uuid-input">UUID</label>
+                    <input id="uuid-input" type="text" placeholder="t-20250000001" required>
+                </div>
+
+                <div class="actions">
+                    <button type="submit" id="print-button">印刷する</button>
+                </div>
+            </form>
+        </section>
+
+        <section class="panel">
+            <h2>ステータス</h2>
+            <div id="status-log" class="status-log" role="status" aria-live="polite"></div>
+        </section>
+    </main>
+
+    <script src="tepraprint.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
