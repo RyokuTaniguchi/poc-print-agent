@@ -1,8 +1,7 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
 
 const BASE_URL_PREFIX = "https://xxx.com/x/";
-const INITIAL_PREVIEW_MESSAGE =
-  "テンプレート、日付、URL、UUID をすべて入力すると、ここにラベル画像を表示します。";
+const INITIAL_PREVIEW_MESSAGE = "テンプレート、日付、URL、UUID をすべて入力すると、ここにラベル画像を表示します。";
 
 const TAPE_IDS = {
   _12MMTAPE: 261,
