@@ -50,6 +50,44 @@
             </form>
         </section>
 
+        <section class="panel" id="preview-panel">
+            <h2>ラベルプレビュー</h2>
+            <div id="preview-empty" class="preview-empty" role="status" aria-live="polite">
+                テンプレート、日付、URL、UUID をすべて入力すると、ここにラベル画像を表示します。
+            </div>
+
+            <div id="preview-content" class="preview-content" hidden>
+                <div class="preview-stage">
+                    <img id="preview-image" class="preview-image" alt="ラベルプレビュー">
+                </div>
+
+                <div class="preview-details">
+                    <p class="preview-note">
+                        現在のテンプレートファイルを画像として表示しています。差し込み後の完成画像そのものではありません。
+                    </p>
+
+                    <dl class="preview-meta">
+                        <div>
+                            <dt>テンプレート</dt>
+                            <dd id="preview-template-name"></dd>
+                        </div>
+                        <div>
+                            <dt>日付</dt>
+                            <dd id="preview-date"></dd>
+                        </div>
+                        <div>
+                            <dt>URL</dt>
+                            <dd id="preview-url"></dd>
+                        </div>
+                        <div>
+                            <dt>UUID</dt>
+                            <dd id="preview-uuid"></dd>
+                        </div>
+                    </dl>
+                </div>
+            </div>
+        </section>
+
         <section class="panel">
             <h2>ステータス</h2>
             <div id="status-log" class="status-log" role="status" aria-live="polite"></div>
