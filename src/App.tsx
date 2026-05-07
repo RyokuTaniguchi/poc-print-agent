@@ -1,7 +1,7 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
 
 const BASE_URL_PREFIX = "https://xxx.com/x/";
-const INITIAL_PREVIEW_MESSAGE = "テンプレート、日付、URL、UUID をすべて入力すると、ここにラベル画像を表示します。";
+const INITIAL_PREVIEW_MESSAGE = "テンプレート、テキスト、URL、UUID をすべて入力すると、ここにラベル画像を表示します。";
 
 const TAPE_IDS = {
   _12MMTAPE: 261,
@@ -18,21 +18,33 @@ type TemplateOption = {
 
 const templateOptions: TemplateOption[] = [
   {
-    id: "template-12x15",
-    label: "12mm テンプレート (12×15)",
-    path: buildPublicAssetPath("template_12×15.lw1"),
+    id: "qr-12x24",
+    label: "QR 12mm テンプレート (12×24)",
+    path: buildPublicAssetPath("QR12×24.lw1"),
     tape: TAPE_IDS._12MMTAPE
   },
   {
-    id: "template-18x21",
-    label: "18mm テンプレート (18×21)",
-    path: buildPublicAssetPath("template_18×21.lw1"),
+    id: "qr-18x18",
+    label: "QR 18mm テンプレート (18×18)",
+    path: buildPublicAssetPath("QR18×18.lw1"),
     tape: TAPE_IDS._18MMTAPE
   },
   {
-    id: "template-24x21",
-    label: "24mm テンプレート (24×21)",
-    path: buildPublicAssetPath("template_24×21.lw1"),
+    id: "qr-18x24",
+    label: "QR 18mm テンプレート (18×24)",
+    path: buildPublicAssetPath("QR18×24.lw1"),
+    tape: TAPE_IDS._18MMTAPE
+  },
+  {
+    id: "qr-24x24",
+    label: "QR 24mm テンプレート (24×24)",
+    path: buildPublicAssetPath("QR24×24.lw1"),
+    tape: TAPE_IDS._24MMTAPE
+  },
+  {
+    id: "qr-24x32",
+    label: "QR 24mm テンプレート (24×32)",
+    path: buildPublicAssetPath("QR24×32.lw1"),
     tape: TAPE_IDS._24MMTAPE
   }
 ];
@@ -41,7 +53,7 @@ export default function App() {
   const [printers, setPrinters] = useState<string[]>([]);
   const [selectedPrinter, setSelectedPrinter] = useState("");
   const [selectedTemplateId, setSelectedTemplateId] = useState("");
-  const [rawDate, setRawDate] = useState("");
+  const [labelText, setLabelText] = useState("");
   const [uuid, setUuid] = useState("");
   const [printerStatus, setPrinterStatus] = useState("");
   const [statusLog, setStatusLog] = useState<string[]>([]);
@@ -58,8 +70,8 @@ export default function App() {
   const url = `${BASE_URL_PREFIX}${trimmedUuid}`;
   const selectedTemplate =
     templateOptions.find((option) => option.id === selectedTemplateId) ?? null;
-  const previewReady = Boolean(selectedTemplate && rawDate.trim() && trimmedUuid);
-  const previewDate = formatJapaneseDate(rawDate) ?? rawDate;
+  const trimmedLabelText = labelText.trim();
+  const previewReady = Boolean(selectedTemplate && trimmedLabelText && trimmedUuid);
 
   useEffect(() => {
     statusLogRef.current?.scrollTo({
@@ -188,14 +200,8 @@ export default function App() {
       return;
     }
 
-    if (!rawDate.trim() || !trimmedUuid) {
-      appendStatus("日付 / UUID をすべて入力してください。");
-      return;
-    }
-
-    const datatime = formatJapaneseDate(rawDate);
-    if (!datatime) {
-      appendStatus("日付の形式が正しくありません。カレンダーから日付を選択してください。");
+    if (!trimmedLabelText || !trimmedUuid) {
+      appendStatus("テキスト / UUID をすべて入力してください。");
       return;
     }
 
@@ -210,7 +216,7 @@ export default function App() {
     try {
       const selectedTemplateFile = await resolveTemplateFile(selectedTemplate);
       const csvFile = createCsvFile({
-        datatime,
+        text: trimmedLabelText,
         url,
         uuid: trimmedUuid
       });
@@ -319,12 +325,13 @@ export default function App() {
           </div>
 
           <div className="field">
-            <label htmlFor="datetime-input">日付</label>
+            <label htmlFor="text-input">テキスト</label>
             <input
-              id="datetime-input"
-              type="date"
-              value={rawDate}
-              onChange={(event) => setRawDate(event.target.value)}
+              id="text-input"
+              type="text"
+              value={labelText}
+              onChange={(event) => setLabelText(event.target.value)}
+              placeholder="2025年度調査"
               disabled={isWorking}
               required
             />
@@ -388,8 +395,8 @@ export default function App() {
                   <dd>{selectedTemplate?.label ?? "-"}</dd>
                 </div>
                 <div>
-                  <dt>日付</dt>
-                  <dd>{previewDate || "-"}</dd>
+                  <dt>テキスト</dt>
+                  <dd>{trimmedLabelText || "-"}</dd>
                 </div>
                 <div>
                   <dt>URL</dt>
@@ -471,20 +478,21 @@ async function resolveTemplateFile(template: TemplateOption) {
 }
 
 function createCsvFile({
-  datatime,
+  text,
   url,
   uuid
 }: {
-  datatime: string;
+  text: string;
   url: string;
   uuid: string;
 }) {
-  const header = ["datatime", "url", "uuid"];
-  const row = [datatime, url, uuid];
-  const csvContent = `${header.join(",")}\n${row.map(escapeCsv).join(",")}\n`;
+  const header = ["text", "url", "uuid"];
+  const row = [text, url, uuid];
+  const csvContent = `${header.join(",")}\r\n${row.map(escapeCsv).join(",")}\r\n`;
+  const encodedCsvContent = encodeUtf16LeWithBom(csvContent);
 
-  return new File([csvContent], `label-data-${Date.now()}.csv`, {
-    type: "text/csv",
+  return new File([encodedCsvContent], `label-data-${Date.now()}.csv`, {
+    type: "text/csv;charset=utf-16le",
     lastModified: Date.now()
   });
 }
@@ -502,14 +510,19 @@ function escapeCsv(value: string | null | undefined) {
   return stringValue;
 }
 
-function formatJapaneseDate(rawDate: string) {
-  const dateMatch = rawDate.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  if (!dateMatch) {
-    return null;
+function encodeUtf16LeWithBom(value: string) {
+  const bytes = new Uint8Array(2 + value.length * 2);
+  bytes[0] = 0xff;
+  bytes[1] = 0xfe;
+
+  for (let index = 0; index < value.length; index += 1) {
+    const codeUnit = value.charCodeAt(index);
+    const byteIndex = 2 + index * 2;
+    bytes[byteIndex] = codeUnit & 0xff;
+    bytes[byteIndex + 1] = codeUnit >> 8;
   }
 
-  const [, year, month, day] = dateMatch;
-  return `${year}年${month}月${day}日`;
+  return bytes;
 }
 
 function preparePrintParameter(printParameter: TepraPrintParameter, tapeId: number) {
