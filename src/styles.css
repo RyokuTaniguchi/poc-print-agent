@@ -130,6 +130,27 @@ h1 {
   flex: 1 1 280px;
 }
 
+.qr-code-inputs {
+  display: grid;
+  grid-template-columns: minmax(3.8rem, 0.6fr) auto minmax(4rem, 0.7fr) auto minmax(5.5rem, 1fr);
+  gap: 0.35rem;
+  align-items: center;
+}
+
+.qr-code-inputs select,
+.qr-code-inputs input {
+  min-width: 0;
+  width: 100%;
+  padding-left: 0.65rem;
+  padding-right: 0.65rem;
+}
+
+.qr-code-separator {
+  color: #667085;
+  font-weight: 800;
+  text-align: center;
+}
+
 .actions {
   display: flex;
   justify-content: flex-end;
@@ -265,6 +286,10 @@ button.secondary {
 
 @media (max-width: 720px) {
   .container {
+    padding: 1rem;
+  }
+
+  .panel {
     padding: 1rem;
   }
 

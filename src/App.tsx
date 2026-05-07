@@ -1,7 +1,12 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
 
 const BASE_URL_PREFIX = "https://xxx.com/x/";
-const INITIAL_PREVIEW_MESSAGE = "テンプレート、テキスト、URL、UUID をすべて入力すると、ここにラベル画像を表示します。";
+const INITIAL_PREVIEW_MESSAGE =
+  "テンプレート、フリー記入項目、発行枚数、QRコード番号をすべて入力すると、ここにラベル画像を表示します。";
+const QR_CODE_LETTERS = Array.from({ length: 26 }, (_, index) => String.fromCharCode(65 + index));
+const QR_CODE_NUMBER_PATTERN = /^[A-Z]-\d{2}-\d{5}$/;
+const ISSUE_QUANTITY_PATTERN = /^[1-9]\d{0,4}$/;
+const MAX_QR_CODE_SERIAL = 99999;
 
 const TAPE_IDS = {
   _12MMTAPE: 261,
@@ -14,6 +19,12 @@ type TemplateOption = {
   label: string;
   path: string;
   tape: number;
+};
+
+type PrintRecord = {
+  text: string;
+  url: string;
+  qrCodeNumber: string;
 };
 
 const templateOptions: TemplateOption[] = [
@@ -54,7 +65,10 @@ export default function App() {
   const [selectedPrinter, setSelectedPrinter] = useState("");
   const [selectedTemplateId, setSelectedTemplateId] = useState("");
   const [labelText, setLabelText] = useState("");
-  const [uuid, setUuid] = useState("");
+  const [qrCodeLetter, setQrCodeLetter] = useState(QR_CODE_LETTERS[0]);
+  const [qrCodeDigitPair, setQrCodeDigitPair] = useState("");
+  const [qrCodeStartNumber, setQrCodeStartNumber] = useState("");
+  const [issueQuantity, setIssueQuantity] = useState("1");
   const [printerStatus, setPrinterStatus] = useState("");
   const [statusLog, setStatusLog] = useState<string[]>([]);
   const [isWorking, setIsWorking] = useState(false);
@@ -66,12 +80,34 @@ export default function App() {
   const statusLogRef = useRef<HTMLDivElement | null>(null);
   const templatePreviewCacheRef = useRef(new Map<string, string>());
 
-  const trimmedUuid = uuid.trim();
-  const url = `${BASE_URL_PREFIX}${trimmedUuid}`;
+  const qrCodeNumber = `${qrCodeLetter}-${qrCodeDigitPair}-${qrCodeStartNumber}`;
+  const isQrCodeNumberComplete = QR_CODE_NUMBER_PATTERN.test(qrCodeNumber);
+  const issueCount = Number(issueQuantity);
+  const isIssueQuantityValid = ISSUE_QUANTITY_PATTERN.test(issueQuantity);
+  const qrCodeStartSerial = Number(qrCodeStartNumber);
+  const qrCodeLastSerial =
+    isQrCodeNumberComplete && isIssueQuantityValid ? qrCodeStartSerial + issueCount - 1 : null;
+  const isQrCodeSerialRangeValid = qrCodeLastSerial == null || qrCodeLastSerial <= MAX_QR_CODE_SERIAL;
+  const qrCodeLastNumber =
+    qrCodeLastSerial == null
+      ? ""
+      : buildQrCodeNumber(qrCodeLetter, qrCodeDigitPair, qrCodeLastSerial);
+  const plannedIssueRange =
+    isQrCodeNumberComplete && isIssueQuantityValid && isQrCodeSerialRangeValid
+      ? issueCount === 1
+        ? qrCodeNumber
+        : `${qrCodeNumber}〜${qrCodeLastNumber}`
+      : "";
   const selectedTemplate =
     templateOptions.find((option) => option.id === selectedTemplateId) ?? null;
   const trimmedLabelText = labelText.trim();
-  const previewReady = Boolean(selectedTemplate && trimmedLabelText && trimmedUuid);
+  const previewReady = Boolean(
+    selectedTemplate &&
+      trimmedLabelText &&
+      isQrCodeNumberComplete &&
+      isIssueQuantityValid &&
+      isQrCodeSerialRangeValid
+  );
 
   useEffect(() => {
     statusLogRef.current?.scrollTo({
@@ -200,8 +236,8 @@ export default function App() {
       return;
     }
 
-    if (!trimmedLabelText || !trimmedUuid) {
-      appendStatus("テキスト / UUID をすべて入力してください。");
+    if (!trimmedLabelText || !isQrCodeNumberComplete || !isIssueQuantityValid) {
+      appendStatus("フリー記入項目 / 発行枚数 / QRコード番号をすべて入力してください。");
       return;
     }
 
@@ -210,16 +246,24 @@ export default function App() {
       return;
     }
 
+    if (!isQrCodeSerialRangeValid) {
+      appendStatus("発行枚数を反映すると QRコード番号の5桁数字が 99999 を超えます。");
+      return;
+    }
+
     setIsWorking(true);
-    appendStatus("テンプレートを準備しています…");
+    appendStatus(`テンプレートと ${issueCount} 枚分の印刷データを準備しています…`);
 
     try {
       const selectedTemplateFile = await resolveTemplateFile(selectedTemplate);
-      const csvFile = createCsvFile({
+      const printRecords = createPrintRecords({
         text: trimmedLabelText,
-        url,
-        uuid: trimmedUuid
+        letter: qrCodeLetter,
+        digitPair: qrCodeDigitPair,
+        startSerial: qrCodeStartSerial,
+        count: issueCount
       });
+      const csvFile = createCsvFile(printRecords);
 
       const printerResult = await TepraPrint.createPrinter(printerName);
       if (printerResult.errorCode !== TepraPrintError.SUCCESS) {
@@ -248,7 +292,7 @@ export default function App() {
         return;
       }
 
-      appendStatus(`ジョブ ${printResult.printJob.jobId} を送信しました。進捗を確認します。`);
+      appendStatus(`ジョブ ${printResult.printJob.jobId} を送信しました。${issueCount} 枚分の進捗を確認します。`);
       await monitorPrintJob(printResult.printJob, appendStatus);
     } catch (error) {
       const message = error instanceof Error ? error.message : "不明なエラーが発生しました。";
@@ -325,31 +369,89 @@ export default function App() {
           </div>
 
           <div className="field">
-            <label htmlFor="text-input">テキスト</label>
+            <label htmlFor="issue-quantity-input">発行枚数</label>
             <input
-              id="text-input"
+              id="issue-quantity-input"
               type="text"
-              value={labelText}
-              onChange={(event) => setLabelText(event.target.value)}
-              placeholder="2025年度調査"
+              inputMode="numeric"
+              pattern="[1-9]\d{0,4}"
+              maxLength={5}
+              value={issueQuantity}
+              onChange={(event) => setIssueQuantity(toDigits(event.target.value, 5))}
+              placeholder="1"
               disabled={isWorking}
               required
             />
           </div>
 
           <div className="field">
-            <label htmlFor="url-input">URL</label>
-            <input id="url-input" type="url" value={url} readOnly disabled={isWorking} required />
+            <label htmlFor="qr-code-letter-select">QRコード番号</label>
+            <div className="qr-code-inputs">
+              <select
+                id="qr-code-letter-select"
+                value={qrCodeLetter}
+                onChange={(event) => setQrCodeLetter(event.target.value)}
+                disabled={isWorking}
+                required
+              >
+                {QR_CODE_LETTERS.map((letter) => (
+                  <option key={letter} value={letter}>
+                    {letter}
+                  </option>
+                ))}
+              </select>
+              <span className="qr-code-separator" aria-hidden="true">
+                -
+              </span>
+              <input
+                type="text"
+                inputMode="numeric"
+                pattern="\d{2}"
+                maxLength={2}
+                value={qrCodeDigitPair}
+                onChange={(event) => setQrCodeDigitPair(toDigits(event.target.value, 2))}
+                placeholder="25"
+                aria-label="QRコード番号 2桁数字"
+                disabled={isWorking}
+                required
+              />
+              <span className="qr-code-separator" aria-hidden="true">
+                -
+              </span>
+              <input
+                type="text"
+                inputMode="numeric"
+                pattern="\d{5}"
+                maxLength={5}
+                value={qrCodeStartNumber}
+                onChange={(event) => setQrCodeStartNumber(toDigits(event.target.value, 5))}
+                placeholder="12345"
+                aria-label="QRコード番号 5桁数字（開始番号）"
+                disabled={isWorking}
+                required
+              />
+            </div>
           </div>
 
           <div className="field">
-            <label htmlFor="uuid-input">UUID</label>
+            <label htmlFor="planned-issue-range">発行予定番号範囲</label>
             <input
-              id="uuid-input"
+              id="planned-issue-range"
               type="text"
-              value={uuid}
-              onChange={(event) => setUuid(event.target.value)}
-              placeholder="t-20250000001"
+              value={plannedIssueRange || "-"}
+              readOnly
+              disabled={isWorking}
+            />
+          </div>
+
+          <div className="field">
+            <label htmlFor="text-input">フリー記入項目</label>
+            <input
+              id="text-input"
+              type="text"
+              value={labelText}
+              onChange={(event) => setLabelText(event.target.value)}
+              placeholder="2025年度調査"
               disabled={isWorking}
               required
             />
@@ -395,16 +497,20 @@ export default function App() {
                   <dd>{selectedTemplate?.label ?? "-"}</dd>
                 </div>
                 <div>
-                  <dt>テキスト</dt>
+                  <dt>発行枚数</dt>
+                  <dd>{isIssueQuantityValid ? `${issueCount} 枚` : "-"}</dd>
+                </div>
+                <div>
+                  <dt>QRコード番号</dt>
+                  <dd>{isQrCodeNumberComplete ? qrCodeNumber : "-"}</dd>
+                </div>
+                <div>
+                  <dt>発行予定番号範囲</dt>
+                  <dd>{plannedIssueRange || "-"}</dd>
+                </div>
+                <div>
+                  <dt>フリー記入項目</dt>
                   <dd>{trimmedLabelText || "-"}</dd>
-                </div>
-                <div>
-                  <dt>URL</dt>
-                  <dd>{url || "-"}</dd>
-                </div>
-                <div>
-                  <dt>UUID</dt>
-                  <dd>{trimmedUuid || "-"}</dd>
                 </div>
               </dl>
             </div>
@@ -477,18 +583,35 @@ async function resolveTemplateFile(template: TemplateOption) {
   };
 }
 
-function createCsvFile({
+function createPrintRecords({
   text,
-  url,
-  uuid
+  letter,
+  digitPair,
+  startSerial,
+  count
 }: {
   text: string;
-  url: string;
-  uuid: string;
+  letter: string;
+  digitPair: string;
+  startSerial: number;
+  count: number;
 }) {
+  return Array.from({ length: count }, (_, index) => {
+    const qrCodeNumber = buildQrCodeNumber(letter, digitPair, startSerial + index);
+    return {
+      text,
+      url: `${BASE_URL_PREFIX}${qrCodeNumber}`,
+      qrCodeNumber
+    };
+  });
+}
+
+function createCsvFile(records: PrintRecord[]) {
   const header = ["text", "url", "uuid"];
-  const row = [text, url, uuid];
-  const csvContent = `${header.join(",")}\r\n${row.map(escapeCsv).join(",")}\r\n`;
+  const rows = records.map((record) =>
+    [record.text, record.url, record.qrCodeNumber].map(escapeCsv).join(",")
+  );
+  const csvContent = `${header.join(",")}\r\n${rows.join("\r\n")}\r\n`;
   const encodedCsvContent = encodeUtf16LeWithBom(csvContent);
 
   return new File([encodedCsvContent], `label-data-${Date.now()}.csv`, {
@@ -510,6 +633,14 @@ function escapeCsv(value: string | null | undefined) {
   return stringValue;
 }
 
+function toDigits(value: string, maxLength: number) {
+  return value.replace(/\D/g, "").slice(0, maxLength);
+}
+
+function buildQrCodeNumber(letter: string, digitPair: string, serial: number) {
+  return `${letter}-${digitPair}-${String(serial).padStart(5, "0")}`;
+}
+
 function encodeUtf16LeWithBom(value: string) {
   const bytes = new Uint8Array(2 + value.length * 2);
   bytes[0] = 0xff;
@@ -528,6 +659,7 @@ function encodeUtf16LeWithBom(value: string) {
 function preparePrintParameter(printParameter: TepraPrintParameter, tapeId: number) {
   return {
     ...printParameter,
+    copies: 1,
     displayPrintSetting: false,
     displayTapeWidth: false,
     previewImage: false,
